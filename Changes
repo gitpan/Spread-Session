@@ -1,4 +1,9 @@
 Revision history for Perl extension Spread::Session
 
+0.2   24 Mar 2002
+	test cases
+	added simple examples
+	changed default admin handler output
+
 0.1   02 Feb 2002
 	- Initial version

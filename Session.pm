@@ -50,7 +50,7 @@ use Log::Channel;
 use Spread;
 
 use vars qw($VERSION);
-$VERSION = '0.1';
+$VERSION = '0.2';
 
 my $DEFAULT_TIMEOUT = 5;
 
@@ -270,16 +270,11 @@ sub _admin_callback {
     my ($service_type, $sender, $groups, $message, @args) = @_;
 
     if ($service_type & TRANSITION_MESS) {
-	print "TRANS_MESS\n";
-	print "SENDER: $sender\n\n";
+	print "> Transition message for $sender\n";
     } elsif ($service_type & REG_MEMB_MESS) {
-	print "REG_MEMB_MESS\n";
-	print "SENDER: $sender\n";
-	print "GROUPS: [", join(",", @$groups), "]\n\n";
+	print "> New member(s) for $sender: ", join(",", @$groups), "\n";
     } elsif ($service_type & MEMBERSHIP_MESS) {
-	print "Self-Leave Message\n";
-	print "SENDER: $sender\n";
-	print "GROUPS: [", join(",", @$groups), "]\n\n";
+	print "> Self-leave message for $sender:", join(",", @$groups), "\n";
     }
 }
 

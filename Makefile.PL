@@ -5,7 +5,8 @@ WriteMakefile(
     'NAME'		=> 'Spread::Session',
     'VERSION_FROM'	=> 'Session.pm', # finds $VERSION
     'PREREQ_PM'		=> {
-			    Log::Channel => 0.4
+			    Log::Channel => 0.4,
+			    Event => 0.85, # for test cases
 			   },
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
       (ABSTRACT_FROM => 'Session.pm', # retrieve abstract from module

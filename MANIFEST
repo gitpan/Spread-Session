@@ -3,4 +3,11 @@ Makefile.PL
 MANIFEST
 README
 Session.pm
-test.pl
+t/00basic.t
+t/01sendreceive.t
+t/02oneway.t
+t/03onewayevent.t
+examples/event.pl
+examples/eventpoe.pl
+examples/sender.pl
+
