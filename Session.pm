@@ -51,7 +51,7 @@ use Carp;
 use Spread;
 
 use vars qw($VERSION);
-$VERSION = '0.3';
+$VERSION = '0.4';
 
 my $DEFAULT_TIMEOUT = 5;
 
@@ -199,7 +199,11 @@ sub publish {
     my ($group, $message) = @_;
 
     undef $sperrno;
-    Spread::multicast($self->{MAILBOX}, SAFE_MESS, $group, 0, $message);
+    Spread::multicast($self->{MAILBOX},		# mbox
+		      SAFE_MESS,		# service_type
+		      $group,			# groups (just one)
+		      0,			# message type
+		      $message);		# message
     croak "Spread::multicast failed: $sperrno" if $sperrno;
 
     msglog "Sent message to $group: ", length $message, " bytes\n";
@@ -243,7 +247,8 @@ be passed along to the callback routines.
 
 sub receive {
     my $self = shift;
-    my $timeout = shift || $self->{TIMEOUT} || $DEFAULT_TIMEOUT;
+				# a 0-sec timeout is not the same as undef
+    my $timeout = defined $_[0] ? shift : $self->{TIMEOUT};
 
     $sperrno = 0;
     my ($service_type, $sender, $groups, $message_type, $endian, $message) =

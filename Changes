@@ -1,6 +1,6 @@
 gRevision history for Perl extension Spread::Session
 
-0.4   02 Aug 2002
+0.4   13 Aug 2002
 
 	* t/: 01sendreceive.t, 02oneway.t, 03onewayevent.t: disable
 	logging, to avoid polluting 'make test' output
@@ -14,6 +14,9 @@ gRevision history for Perl extension Spread::Session
 	Added default TIMEOUT override parameter to constructor.
 
 	* t/04sendrcvnewcbk.t: test case for new callback style
+
+	* 0-second timeout is not the same thing as undefined
+	* logging.xml and LOG_CHANNEL_CONFIG
 
 0.3   05 Apr 2002
 

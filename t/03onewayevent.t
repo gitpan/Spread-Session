@@ -1,10 +1,8 @@
-#!/usr/bin/perl
+BEGIN {
+    $ENV{LOG_CHANNEL_CONFIG} = "t/logging.xml";
+}
 
 use Spread::Session;
-
-if (defined eval { require Log::Channel }) {
-    disable Log::Channel "Spread::Session";
-}
 
 my $group = "session_test";
 

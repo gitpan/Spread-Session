@@ -1,11 +1,10 @@
-use Test;
-BEGIN { plan tests => 2 }
+use Test::Simple tests => 2;
+
+BEGIN {
+    $ENV{LOG_CHANNEL_CONFIG} = "t/logging.xml";
+}
 
 use Spread::Session;
-
-if (defined eval { require Log::Channel }) {
-    disable Log::Channel "Spread::Session";
-}
 
 my $group = "session_test";
 
@@ -18,7 +17,6 @@ if (fork) {
     $session->callbacks(
 			message => sub {
 			    my ($sender, $groups, $message) = @_;
-			    print "MESSAGE:\n", $message, "\n";
 			    ok($message eq "response!");
 			}
 		       );
