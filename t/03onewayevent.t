@@ -1,7 +1,10 @@
-use Test;
-BEGIN { plan tests => 2 }
+#!/usr/bin/perl
 
 use Spread::Session;
+
+if (defined eval { require Log::Channel }) {
+    disable Log::Channel "Spread::Session";
+}
 
 my $group = "session_test";
 
@@ -17,6 +20,14 @@ if (fork) {
 } else {
     # this is the listener
 
+    use Test::More;
+    if (eval "require Event") {
+	plan tests => 2;
+    } else {
+	plan skip_all => "Event.pm not installed";
+	exit;
+    }
+
     use Event qw(loop unloop);
 
     my $session = new Spread::Session;
@@ -24,7 +35,7 @@ if (fork) {
     $session->callbacks(
 			message => sub {
 			    my ($sender, $groups, $message) = @_;
-			    ok($message eq "test message");
+			    ok($message eq "test message", "got it");
 			    Event::unloop;
 			}
 		       );
@@ -34,6 +45,6 @@ if (fork) {
 	      cb => sub { $session->receive(0) },
 	     );
     Event::loop;
-}
 
-ok(1);
+    ok(1, "listener exited loop");
+}

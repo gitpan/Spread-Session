@@ -12,16 +12,16 @@ enable Log::Channel "Spread::Session";
 
 my $group = shift @ARGV || "example";
 
-my $session = new Spread::Session;
-$session->callbacks(
-		     message => sub {
-			 my ($sender, $groups, $message) = @_;
+my $session = new Spread::Session(
+		     MESSAGE_CALLBACK => sub {
+			 my ($msg) = @_;
 
-			 print "THE SENDER IS $sender\n";
-			 print "GROUPS: [", join(",", @$groups), "]\n";
-			 print "MESSAGE:\n", $message, "\n\n";
+			 print "THE SENDER IS $msg->{SENDER}\n";
+			 print "GROUPS: [", join(",", @{$msg->{GROUPS}}), "]\n";
+			 print "MESSAGE:\n", $msg->{BODY}, "\n\n";
 
-			 $session->publish($sender, "the response!");
+			 $msg->{SESSION}->publish($msg->{SENDER},
+						  "the response!");
 		     },
 		    );
 $session->subscribe($group);

@@ -15,12 +15,11 @@ use POE;
 
 my $group = shift @ARGV || 'test';
 
-my $session = new Spread::Session;
-$session->callbacks(
-		     message => sub {
-			 my ($sender, $groups, $message) = @_;
+my $session = new Spread::Session(
+		     MESSAGE_CALLBACK => sub {
+			 my ($msg) = @_;
 
-			 print "RECEIVED: ", $message, "\n";
+			 print "RECEIVED: ", $msg->{BODY}, "\n";
 		     }
 		    );
 $session->subscribe($group);

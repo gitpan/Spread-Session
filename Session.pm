@@ -8,18 +8,20 @@ Spread::Session - OO wrapper for Spread messaging toolkit
 
   use Spread::Session;
 
-  my $session = new Spread::Session;
+  my $session = new Spread::Session(
+			MESSAGE_CALLBACK => \&message_callback,
+			ADMIN_CALLBACK   => sub {},
+				   );
+
   $session->subscribe("mygroup");
   $session->publish("othergroup", $message);
 
-  $session->callbacks(message => \&message_callback,
-                      timeout => \&timeout_callback,
-                      admin => \&admin_callback);
-  my $input = $session->receive($timeout);
+  $session->receive($timeout, $extra_param);
 
   sub message_callback {
-    my ($sender, $groups, $message) = @_;
-    return $message;
+    my ($message_info, $extra_param) = @_;
+    # do something
+    return $message_info->{BODY};
   }
 
 =head1 DESCRIPTION
@@ -46,18 +48,27 @@ use 5.005;
 use strict;
 #use warnings;
 use Carp;
-use Log::Channel;
 use Spread;
 
 use vars qw($VERSION);
-$VERSION = '0.2';
+$VERSION = '0.3';
 
 my $DEFAULT_TIMEOUT = 5;
 
 BEGIN {
-    my $log = new Log::Channel;
-    sub sslog { $log->(@_) }
-    my $msglog = new Log::Channel("message");
+    # don't make Spread::Session dependent on Log::Channel, but
+    # use it if it's available.
+
+    my ($sslog, $msglog);
+    if (defined eval { require Log::Channel }) {
+	$sslog = new Log::Channel;
+	$msglog = new Log::Channel("message");
+    } else {
+	$sslog = sub {};
+	$msglog = sub {};
+    }
+
+    sub sslog { $sslog->(@_) }
     sub msglog { $msglog->(@_) }
 }
 
@@ -65,7 +76,12 @@ BEGIN {
 =item B<new>
 
   my $session = new Spread::Session(private_name => 'foo',
-                                    spread_name => '4444@remotenode');
+                                    spread_name => '4444@remotenode',
+	#optional		    MESSAGE_CALLBACK => \&my_msg_callback,
+	#optional		    ADMIN_CALLBACK => \&my_admin_callback,
+	#optional		    TIMEOUT_CALLBACK => \&my_timeout_callback,
+	#optional		    TIMEOUT => 5,
+				   );
 
 Establish a connection to a Spread messaging daemon at the host and
 port specified in the 'spread_name' parameter.  Default value is
@@ -74,6 +90,16 @@ port specified in the 'spread_name' parameter.  Default value is
 If 'private_name' is not provided, Spread will generate a unique private
 address based on process id and hostname.  If a value is provided for this
 parameter, you must ensure uniqueness.
+
+Provided MESSAGE_CALLBACK and ADMIN_CALLBACK coderefs will be invoked
+with a reference to a hash containing the components of the incoming
+message in fields named SERVICE_TYPE, SENDER, GROUPS (arrayref),
+MESSAGE_TYPE, ENDIAN, and BODY.  A reference back to the Spread::Session
+object is provided in SESSION.  Any other parameters provided in the
+receive() method call will be passed through to the callback as well.
+
+The TIMEOUT parameter overrides the built-in 5-second default timeout
+for the receive() call.
 
 =cut
 
@@ -94,19 +120,24 @@ sub new {
     undef $sperrno;
     my ($mailbox, $private_group) = Spread::connect(\%config);
     croak "Spread::connect failed: $sperrno" if $sperrno;
+    sslog "Spread connection established as $private_group\n";
 
-    my $self = {};
+    my $self = \%config;
 
     $self->{MAILBOX} = $mailbox;
     $self->{PRIVATE_GROUP} = $private_group;
 
-    sslog "Spread connection established as $self->{PRIVATE_GROUP}\n";
+    $self->{MESSAGE_CALLBACK} ||= \&_message_callback;
+    $self->{ADMIN_CALLBACK} ||= \&_admin_callback;
+    $self->{TIMEOUT_CALLBACK} ||= \&_timeout_callback;
+
+    $self->{TIMEOUT} ||= $DEFAULT_TIMEOUT;
 
     bless $self, $class;
     return $self;
 }
 
-=item B<callbacks>
+=item B<callbacks - DEPRECATED>
 
   $session->callbacks(message => \&message_callback,
                       admin => \&admin_callback,
@@ -116,7 +147,7 @@ Define application callback functions for regular inbound messages
 on subscribed groups, administrative messages regarding subscribed
 groups (e.g. membership events), and timeouts (cf. receive).
 
-If no value is provided for one of these events, a trivial stub is
+If no value is provided for any one of these events, a trivial stub is
 provided by Spread::Session.
 
 =cut
@@ -125,9 +156,9 @@ sub callbacks {
     my $self = shift;
 
     my %callbacks = @_;
-    $self->{CALLBACKS}->{MESSAGE} = $callbacks{message};
-    $self->{CALLBACKS}->{ADMIN} = $callbacks{admin};
-    $self->{CALLBACKS}->{TIMEOUT} = $callbacks{timeout};
+    $self->{OLD_CALLBACKS}->{MESSAGE} = $callbacks{message} if $callbacks{message};
+    $self->{OLD_CALLBACKS}->{ADMIN} = $callbacks{admin} if $callbacks{admin};
+    $self->{OLD_CALLBACKS}->{TIMEOUT} = $callbacks{timeout} if $callbacks{timeout};
 }
 
 
@@ -212,28 +243,59 @@ be passed along to the callback routines.
 
 sub receive {
     my $self = shift;
-    my $timeout = shift || $DEFAULT_TIMEOUT;
+    my $timeout = shift || $self->{TIMEOUT} || $DEFAULT_TIMEOUT;
 
     $sperrno = 0;
-    my($service_type, $sender, $groups, $message_type, $endian, $message) =
+    my ($service_type, $sender, $groups, $message_type, $endian, $message) =
       Spread::receive($self->{MAILBOX}, $timeout);
 
     if ($sperrno == 3) {
 	# timeout
-	my $callback = $self->{CALLBACKS}->{TIMEOUT} || \&_timeout_callback;
-	return $callback->(@_);
+	if ($self->{OLD_CALLBACKS}->{TIMEOUT}) {
+	    return $self->{OLD_CALLBACKS}->{TIMEOUT}->(@_);
+	} else {
+	    return $self->{TIMEOUT_CALLBACK}->(@_);
+	}
     }
+
+    # any other error from Spread::receive besides timeout is fatal
+    # *** MAKE SURE THIS MAKES SENSE ***
 
     croak "Spread::receive failed: $sperrno" if $sperrno;
 
     msglog "Received message from $sender: ", length $message, " bytes\n";
 
+    my %message_container = (
+ 			     SERVICE_TYPE => $service_type,
+ 			     SENDER => $sender,
+ 			     GROUPS => $groups,
+ 			     MESSAGE_TYPE => $message_type,
+ 			     ENDIAN => $endian,
+			     SESSION => $self,
+ 			     BODY => $message,
+ 			    );
+
     if ($service_type & REGULAR_MESS) {
-	my $callback = $self->{CALLBACKS}->{MESSAGE} || \&_message_callback;
-	$callback->($sender, $groups, $message, @_);
+	if (defined $self->{OLD_CALLBACKS}->{MESSAGE}) {
+	    return $self->{OLD_CALLBACKS}->{MESSAGE}->($sender,
+						       $groups,
+						       $message,
+						       @_);
+	} else {
+	    return $self->{MESSAGE_CALLBACK}->(\%message_container,
+					       @_);
+	}
     } else {
-	my $callback = $self->{CALLBACKS}->{ADMIN} || \&_admin_callback;
-	$callback->($service_type, $sender, $groups, $message, @_);
+	if (defined $self->{OLD_CALLBACKS}->{ADMIN}) {
+	    return $self->{OLD_CALLBACKS}->{ADMIN}->($service_type,
+						     $sender,
+						     $groups,
+						     $message,
+						     @_);
+	} else {
+	    return $self->{ADMIN_CALLBACK}->(\%message_container,
+					     @_);
+	}
     }
 }
 
@@ -258,23 +320,28 @@ of these.
 =cut
 
 sub _message_callback {
-    my ($sender, $groups, $message, @args) = @_;
+    my ($container, @args) = @_;
 
-    print "SENDER: $sender\n";
-    print "GROUPS: [", join(",", @$groups), "]\n";
-    print "REG_MESSAGE: $message\n\n";
+    sslog "SENDER: $container->{SENDER}\n";
+    sslog "GROUPS: [", join(",", @{$container->{GROUPS}}), "]\n";
+    sslog "MESSAGE TYPE: $container->{MESSAGE_TYPE}\n";
+    sslog "REG_MESSAGE: $container->{BODY}\n\n";
 }
 
 
 sub _admin_callback {
-    my ($service_type, $sender, $groups, $message, @args) = @_;
+    my ($container, @args) = @_;
 
-    if ($service_type & TRANSITION_MESS) {
-	print "> Transition message for $sender\n";
-    } elsif ($service_type & REG_MEMB_MESS) {
-	print "> New member(s) for $sender: ", join(",", @$groups), "\n";
-    } elsif ($service_type & MEMBERSHIP_MESS) {
-	print "> Self-leave message for $sender:", join(",", @$groups), "\n";
+    if ($container->{SERVICE_TYPE} & TRANSITION_MESS) {
+	sslog "> Transition message for $container->{SENDER}\n";
+    } elsif ($container->{SERVICE_TYPE} & REG_MEMB_MESS) {
+	sslog ("> New member(s) for $container->{SENDER}: ",
+	       join(",", @{$container->{GROUPS}}),
+	       "\n");
+    } elsif ($container->{SERVICE_TYPE} & MEMBERSHIP_MESS) {
+	sslog ("> Self-leave message for $container->{SENDER}:",
+	       join(",", @{$container->{GROUPS}}),
+	       "\n");
     }
 }
 
@@ -301,6 +368,7 @@ sub err {
 DESTROY {
     my $self = shift;
     Spread::disconnect($self->{MAILBOX});
+    sslog "Spread session $self->{PRIVATE_GROUP} disconnected\n";
 }
 
 1;
@@ -309,6 +377,9 @@ DESTROY {
 =head1 AUTHOR
 
 Jason W. May <jmay@pobox.com>
+
+Joshua Goodall <joshua@roughtrade.net> maintains the FreeBSD package for
+this module.
 
 =head1 COPYRIGHT
 

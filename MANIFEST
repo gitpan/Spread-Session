@@ -7,7 +7,8 @@ t/00basic.t
 t/01sendreceive.t
 t/02oneway.t
 t/03onewayevent.t
+t/04sendrcvnewcbk.t
 examples/event.pl
 examples/eventpoe.pl
 examples/sender.pl
-
+examples/poe.pl

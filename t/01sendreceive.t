@@ -3,6 +3,10 @@ BEGIN { plan tests => 2 }
 
 use Spread::Session;
 
+if (defined eval { require Log::Channel }) {
+    disable Log::Channel "Spread::Session";
+}
+
 my $group = "session_test";
 
 if (fork) {

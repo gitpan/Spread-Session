@@ -14,17 +14,16 @@ enable Log::Channel "Spread::Session::message";
 my $queue_name = shift @ARGV || die;
 my $message = shift @ARGV || die;
 
-my $session = new Spread::Session;
-$session->callbacks(
-		     message => \&callback,
+my $session = new Spread::Session(
+				  MESSAGE_CALLBACK => \&callback,
 		    );
 $session->publish($queue_name, $message);
 
 
 sub callback {
-    my ($sender, $groups, $message) = @_;
+    my ($msg) = @_;
 
-    print "SENDER: $sender\n";
-    print "GROUPS: [", join(",", @$groups), "]\n";
-    print "MESSAGE:\n", $message, "\n";
+    print "SENDER: $msg->{SENDER}\n";
+    print "GROUPS: [", join(",", @{$msg->{GROUPS}}), "]\n";
+    print "MESSAGE:\n", $msg->{BODY}, "\n";
 }
